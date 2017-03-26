@@ -1,0 +1,593 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Blackjack</title>
+  <meta charset="utf-8"/>
+  <script src="http://code.jquery.com/jquery-1.11.1.min.js"></script>
+  <script>
+  
+  
+  /* global $, alert */
+
+  $(document).ready( function() {
+    "use strict";
+
+    // These variable track the state of this "game"
+    function newDeck(){ 
+	return ["2S","3S","4S","5S","6S","7S","8S","9S","10S","JS","QS","KS","AS",
+				"2D","3D","4D","5D","6D","7D","8D","9D","10D","JD","QD","KD","AD",
+				"2H","3H","4H","5H","6H","7H","8H","9H","10H","JH","QH","KH","AH",
+				"2C","3C","4C","5C","6C","7C","8C","9C","10C","JC","QC","KC","AC"];
+	}
+	var deck = []
+	
+    var money = 400;
+	
+	var bid = 50;
+	var d_value = 0;
+	var d_cards = "";
+	var d_aces_as_one = 0;
+	var p_value = 0;
+	var p_cards = ""
+	var p_aces_as_one = 0;
+	var game_state = "setup";
+	var bid_mutiply = 1;
+	var rounds = 0;
+	var maximum_bid = 300
+	var minimum_bid = 50
+	
+	
+
+   function sendScore(score) {
+      var msg = {
+        "messageType": "SCORE",
+        "score": parseInt(score)
+      };
+      window.parent.postMessage(msg, "*");
+    }
+	
+	function saveGame() {
+      var msg = {
+        "messageType": "SAVE",
+        "gameState": {
+          "money": parseInt(money)
+        }
+      };
+      window.parent.postMessage(msg, "*");
+    }
+
+	function loadGame(){
+      var msg = {
+        "messageType": "LOAD_REQUEST",
+      };
+      window.parent.postMessage(msg, "*");
+    }
+
+    // Listen incoming messages, if the messageType
+    // is LOAD then the game state will be loaded.
+    // Note that no checking is done, whether the
+    // gameState in the incoming message contains
+    // correct information.
+    //
+    // Also handles any errors that the service
+    // wants to send (displays them as an alert).
+    window.addEventListener("message", function(evt) {
+      if(evt.data.messageType === "LOAD") {
+        money = evt.data.gameState.money;
+      } else if (evt.data.messageType === "ERROR") {
+        alert(evt.data.info);
+      }
+    });
+
+    // Request the service to set the resolution of the
+    // iframe correspondingly
+    var message =  {
+      messageType: "SETTING",
+      options: {
+      	"width": 700, //Integer
+        "height": 300 //Integer
+        }
+    };
+    window.parent.postMessage(message, "*");
+
+	
+
+
+	
+	function aiTurn(){
+		
+		if(p_value <= 21){
+			if(d_value < p_value && d_value <= 16){
+			dealerDraw()
+			aiTurn()
+			return;
+			}
+		}
+		winnerIs()
+	}
+  
+	function winnerIs(){
+		var winner = "t"
+		if(p_value > 21){
+			winner = "d";
+		}else if(d_value > 21){
+			winner = "p";
+		}else if(d_value > p_value){
+			winner = "d";
+		}else if(d_value < p_value){
+			winner = "p";
+		}
+	
+		
+		var profit = 0;
+		var money_on_table = Math.round((bid*bid_mutiply)/10)*10;
+		var v_text = ""
+		if (winner === "p"){
+			profit += money_on_table;
+			v_text = "player is the winner! Earned " + profit.toString() + "$!";
+		}else if(winner === "d"){
+			profit -= money_on_table;
+			v_text = "dealer is the winner! Lost " + profit.toString()  + "$!";
+		}else{
+			v_text = "It's a tie!"
+		}
+		
+		money += profit;
+		$("#message_text").text(v_text);
+		$("#money").text(money);
+		
+		// Check if player can still play
+		if(money < minimum_bid){
+			v_text += " You cannot afford the minimum bid! You were kicked out of the table!"
+			gameOver(v_text)
+
+		}else{
+		game_state="end"
+		changeGameView()
+		}
+	}
+	// Dealer draw cards from bottom of the deck
+	function dealerDraw(){
+	
+		var card = "";
+		card = deck.splice(-1,1)[0];
+	    var cards_value_aces = drawCard("#dealer_cards", "#dealer_value",d_cards,d_value,d_aces_as_one,card);
+	    d_cards = cards_value_aces[0];
+		d_value = cards_value_aces[1];
+		d_aces_as_one = cards_value_aces[2]
+		
+    };
+  
+    function playerDraw(){
+		var card = deck.pop();
+		var cards_value_aces = drawCard("#player_cards", "#player_value",p_cards,p_value,p_aces_as_one,card);
+		p_cards = cards_value_aces[0];
+		p_value = cards_value_aces[1];
+		p_aces_as_one = cards_value_aces[2];
+    };
+  
+	function drawCard(ui_cards, ui_value, hand_cards, hand_value, aces_as_one, card){
+		
+		if(hand_cards.length != 0){
+			hand_cards = hand_cards + ", ";
+		}
+				
+		hand_cards = hand_cards + card;
+		
+		$(ui_cards).text(hand_cards);
+
+		hand_value += cardValue(card);
+		
+		//Handle aces if gamer went over 21
+		if(hand_value > 21){
+			var aces = (hand_cards.match(/A/g) || []).length;
+			if(aces > aces_as_one){
+				hand_value -= 10;
+				aces_as_one += 1;
+			}
+		}
+		
+		
+		$(ui_value).text(hand_value);
+
+		return [hand_cards, hand_value, aces_as_one];
+	};
+    
+	function cardValue(card){
+		var value = "";
+		value = card.charAt(0);
+		if (card.length === 3 || value === "J" || value === "Q" || value === "K" ){
+			return 10;
+		}else if (value === "A"){
+			return 11;	
+		}else{
+			return parseInt(value);
+		}
+	}
+	
+	function shuffleDeck() {
+	
+		var j, x, i;
+		for (i = deck.length; i; i--) {
+			j = Math.floor(Math.random() * i);
+			x = deck[i - 1];
+			deck[i - 1] = deck[j];
+			deck[j] = x;
+		}
+	}
+	
+	function cleanTable(){
+		p_value = 0
+		p_cards = ""
+		d_value = 0
+		d_cards = ""
+		p_aces_as_one = 0
+		d_aces_as_one = 0
+		$("#player_value").text(p_value);
+		$("#dealer_value").text(d_value);
+		$("#player_cards").text(p_cards);
+		$("#dealer_cards").text(d_cards);
+		$("#message_text").text("");
+		bid_mutiply = 1
+		deck = newDeck();
+		deck = deck.concat(newDeck());
+		deck = deck.concat(newDeck());		
+		if (bid < minimum_bid){
+			bid = minimum_bid;
+		}else if (money < bid){
+			bid = money;
+		}
+		
+		$("#bid").text(bid);	
+	}
+	
+	function gotNaturals(){
+		var d_natural = false;
+		if (d_value + cardValue(deck[deck.length-1]) === 21){
+			d_natural = true;
+		}
+	
+		if(p_value === 21){
+			bid_mutiply = 1.5;
+			dealerDraw();
+			winnerIs();
+		}
+		if(d_natural === true){
+			dealerDraw();
+			winnerIs();
+		}
+		
+	}
+	
+	function checkDoublesValidity(){
+		document.getElementById("double").style.display = "none";
+		if(p_value > 8 && p_value < 12 && p_cards.length == 6){
+			document.getElementById("double").style.display = "inline";		
+		}
+	}
+	
+	function changeGameView(){
+	
+		if(game_state === "start"){
+			
+			document.getElementById("game_over_phase").style.display = "none";			
+			document.getElementById("game_area").style.display = "block";
+			document.getElementById("end_phase").style.display = "none";
+			document.getElementById("game_phase").style.display = "block";
+			document.getElementById("bid_phase").style.display = "none";
+			document.getElementById("setup_phase").style.display = "none";
+			document.getElementById("rules_phase").style.display = "none";
+			document.getElementById("less_bid").style.display = "none";
+			document.getElementById("more_bid").style.display = "none";
+			document.getElementById("min_bid").style.display = "none";
+			document.getElementById("max_bid").style.display = "none";
+			
+		}else if(game_state === "end"){
+		
+			document.getElementById("game_over_phase").style.display = "none";
+			document.getElementById("game_area").style.display = "block";
+			document.getElementById("end_phase").style.display = "block";
+			document.getElementById("game_phase").style.display = "none";
+			document.getElementById("bid_phase").style.display = "none";
+			document.getElementById("setup_phase").style.display = "none";
+			document.getElementById("rules_phase").style.display = "none";
+			document.getElementById("less_bid").style.display = "none";
+			document.getElementById("more_bid").style.display = "none";
+			document.getElementById("min_bid").style.display = "none";
+			document.getElementById("max_bid").style.display = "none";
+		
+		}else if(game_state === "bid"){
+		
+			document.getElementById("game_over_phase").style.display = "none";
+			document.getElementById("game_area").style.display = "block";
+			document.getElementById("end_phase").style.display = "none";
+			document.getElementById("game_phase").style.display = "none";
+			document.getElementById("setup_phase").style.display = "none";
+			document.getElementById("bid_phase").style.display = "block";
+			document.getElementById("rules_phase").style.display = "none";
+			document.getElementById("less_bid").style.display = "inline";
+			document.getElementById("more_bid").style.display = "inline";
+			document.getElementById("min_bid").style.display = "inline";
+			document.getElementById("max_bid").style.display = "inline";
+		
+		}else if(game_state === "setup"){
+			document.getElementById("game_over_phase").style.display = "none";
+			document.getElementById("game_area").style.display = "block";
+			document.getElementById("end_phase").style.display = "none";
+			document.getElementById("game_phase").style.display = "none";
+			document.getElementById("setup_phase").style.display = "block";
+			document.getElementById("bid_phase").style.display = "none";
+			document.getElementById("rules_phase").style.display = "none";
+			document.getElementById("less_bid").style.display = "none";
+			document.getElementById("more_bid").style.display = "none";
+			document.getElementById("min_bid").style.display = "none";
+			document.getElementById("max_bid").style.display = "none";
+		
+		
+		
+		}else if(game_state === "rules"){
+			document.getElementById("game_over_phase").style.display = "none";
+			document.getElementById("game_area").style.display = "none";
+			document.getElementById("rules_phase").style.display = "block";
+	
+		}else if(game_state === "game_over"){
+			document.getElementById("game_over_phase").style.display = "block";
+			document.getElementById("game_area").style.display = "none";
+			document.getElementById("rules_phase").style.display = "none";
+	
+		}
+	}
+	
+	function gameOver(txt){
+	
+		$("#game_over_txt").text(txt);
+		
+		//calculate final score
+		var score = 0;
+		score += money;
+		score += rounds*100;
+	
+		$("#final_score").text(score.toString());
+	
+		game_state="game_over";
+		changeGameView();
+		money = 0;
+	
+		saveGame();
+		sendScore(score);
+	
+	}
+	// GAME STATE BUTTON HANDLIN
+	
+	$("#back").click( function () {
+		game_state="setup"
+		changeGameView()
+	})
+	
+	$("#start_game").click( function () {
+		cleanTable()
+		game_state="bid"
+		changeGameView()
+	})
+	
+	$("#rules").click( function () {
+		game_state="rules"
+		changeGameView()
+	})
+	
+	$("#continue").click( function () {
+		cleanTable()
+		game_state="bid"
+		changeGameView()
+	})
+
+	$("#quit").click( function () {
+		var txt = "You decided to leave the table before you start losing!";
+		gameOver(txt);
+	})
+	
+	$("#start_round").click( function () {
+
+		if(money-bid < 0){
+			return;
+		}
+		
+			rounds += 1;
+			maximum_bid += 100
+			minimum_bid += 50
+			shuffleDeck();
+			dealerDraw();
+			playerDraw();
+			playerDraw();
+		
+			game_state = "start"
+			changeGameView();
+			
+			gotNaturals();
+			checkDoublesValidity();
+	})
+  	
+	$("#more_bid").click( function () {
+		if(bid+10 > money || bid+10 > maximum_bid){
+			return;
+		}
+		bid += 10;
+		$("#bid").text(bid);
+	})
+
+	$("#less_bid").click( function () {
+		if(bid-10 >= minimum_bid){
+			bid -= 10;
+			$("#bid").text(bid);
+		}
+	})
+
+	$("#max_bid").click( function () {
+		if(money < minimum_bid){
+			return;
+		}else if(money > maximum_bid){
+			bid = maximum_bid;
+		}else{
+			bid = money;
+		}
+		$("#bid").text(bid);
+	})
+
+	$("#min_bid").click( function () {
+		bid = minimum_bid;
+		$("#bid").text(bid);
+	})
+	
+	$("#hit").click( function () {
+		playerDraw();
+		checkDoublesValidity()
+		if(p_value >= 21){
+			aiTurn();
+		}
+	})
+	
+	$("#stand").click( function () {
+			aiTurn();
+	})
+
+	$("#double").click( function () {
+		
+		if(money < bid*2){
+			return;
+		}
+		bid_mutiply = 2
+		$("#bid").text(bid*bid_mutiply);
+		playerDraw();
+		checkDoublesValidity()
+		aiTurn();
+		
+	})
+	
+	$("#save").click( function () {
+		saveGame();		
+	})
+	
+	$("#load").click( function () {
+		loadGame();		
+	})
+	
+  });
+  </script>
+  
+  <style>
+  div#game_phase , div#end_phase, div#bid_phase, div#rules_phase, div#game_over_phase{
+  display: none;
+  }
+  
+  button#more_bid, button#less_bid, button#min_bid, button#max_bid {
+  display: none;
+  }
+  
+  </style>
+  
+</head>
+<body>
+
+  <div id="game_area">
+	  <h3>Dealer's hand</h3>
+	  <div>Value: <span  id="dealer_value"></span></div>
+	  <div>Cards: <span  id="dealer_cards"></span></div>
+	  <h3> Your hand</h3>
+	  <div>Value: <span  id="player_value"></span></div>
+	  <div>Cards: <span  id="player_cards"></span></div>
+		
+		
+		
+	  <br> <span id="message_text"></span> <br>
+	  <p>
+		  <span  id="money">400</span>$ Money <br>
+		  <button id="min_bid">Min</button>
+		  <button id="less_bid">-</button>
+		  Bid: 
+		  <span id="bid">50</span>$
+		  <button id="more_bid">+</button>
+		  <button id="max_bid">Max</button><br>
+	  </p>
+	  
+	  <div id="game_phase">
+		  <button id="hit">Hit</button>
+		  <button id="double">Double</button>
+		  <button id="stand">Stand</button>
+	  </div>
+		
+	  <div id="end_phase">
+		  <button id="continue" >Continue</button>
+		  <button id="save" >Save</button><br>
+		  <button id="quit" >Quit (submit score)</button>
+		  
+	  </div>
+	  
+	  <div id="setup_phase">
+		<button id="start_game">Start game</button>
+		<button id="load" >Load</button>
+		<button id="rules">Rules</button>
+	  </div>
+	  
+	  
+	  <div id="bid_phase">
+		<button id="start_round">Deal</button>
+	  </div>
+  </div>
+  <div id="game_over_phase">
+  <h2>GAME OVER</h2>
+  <p id="game_over_txt">
+  </p>
+  
+  <h3>Your final score was: <span id="final_score"></span>
+  </h3>
+  
+  </div>
+  <div id="rules_phase">
+	<h3>Three Deck Blackjack</h3>
+	<p>
+	As the name imposes, the game is blackjack wiht three decks. 
+	The goal of the blackjack is to beat the dealer by getting a count 
+	as close to 21 as possible, without going over 21. 
+	Face cards value is always ten. Ace is one or eleven. Game start by placing a bid. 
+	Maximum and minimum amount of bid depends on how many round player have played in consecutive (saving and loading will reset this) 
+	Player will gain or lose that amount money depending on if s/he wins or loses.
+	</p>
+	<p>
+	After bidding phase the dealer will deal two card for both of the participants. 
+	Dealer's second card is invisible for player. If neither of the players have 21 in 
+	starting hand that player wins the game. If dealer wins player will lose money as 
+	much the bid is, while if the player wins s/he will gain money as much the bid is 
+	times one and half. Otherwise the game will continue to players turn. Player can 
+	draw new card(s) by pressing hit until s/he goes over 21 or decided to stay with 
+	his/her current hand. Then the dealer will do the same. Dealer WILL stay put if 
+	his/her hand is over 16. If player goes over 21 before dealer's turn, the dealer wins.
+	if dealer goes over 21 the player wins.
+	</p>
+	<p>
+	If player's cards combinated value is 9-11, s/he has possibility to double down. 
+	This mean that the bid is multiplied by two and the dealer will deal only one card 
+	to the player and the the dealer will start his/her own turn.
+	</p>
+		
+	<p>
+	This game does not support splitting ones hand.
+	</p>
+	After a round player has oppoturnity to leave the table. 
+	When player leaves the table the game will end but his/her 
+	score will be sent to the parent site. 
+	</p>
+	<p>The score is based on 
+	how many rounds player played in consecution and how much money s/he had 
+	before s/he lost or quit. So much money does not necessary 
+	mean high score. Also keep in mind that GAME OVER WILL RESET YOUR SAVE!
+	<p>
+	Here is some backround <a href="https://www.youtube.com/watch?v=0SIizvT5Bk8" target="_blank">music</a>. 
+	Win much and lose more.  
+	</p>
+	<p>Happy gaming pumpkin<3
+	</p>
+	<br><br><button id="back">Back</button>
+  </div>
+  
+</body>
+</html>
