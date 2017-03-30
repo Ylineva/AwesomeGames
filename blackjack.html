@@ -471,6 +471,20 @@
 		loadGame();		
 	})
 	
+	$("#new_game").click( function () {
+		game_state = "setup";
+		money = 400;
+		bid = 50
+		maximum_bid = 300
+		minimum_bid = 50
+		rounds = 0
+		cleanTable();
+		$("#bid").text(bid);
+		$("#money").text(money);
+		changeGameView();	
+	})
+	
+	
   });
   </script>
   
@@ -539,8 +553,8 @@
   </p>
   
   <h3>Your final score was: <span id="final_score"></span>
-  </h3>
-  
+  </h3> <br><br>
+  <button id="new_game">Start new game</button>
   </div>
   <div id="rules_phase">
 	<h3>Three Deck Blackjack</h3>
