@@ -74,6 +74,7 @@
     window.addEventListener("message", function(evt) {
       if(evt.data.messageType === "LOAD") {
         money = evt.data.gameState.money;
+		$("#money").text(money);
       } else if (evt.data.messageType === "ERROR") {
         alert(evt.data.info);
       }
@@ -351,8 +352,8 @@
 	
 		game_state="game_over";
 		changeGameView();
-		money = 0;
-	
+		//Overwrite old save with fresh data
+		money = 400;
 		saveGame();
 		sendScore(score);
 	
